@@ -1,112 +1,124 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import MD5 from 'crypto-js/md5'; // Import MD5 from crypto-js
 
-function RecipeList() {
-  const [recipes, setRecipes] = useState([]);
+const PUBLIC_KEY = '0f0c818eb8ec3a84d65ce78a2cbfd897'; // Replace with your Marvel API public key
+const PRIVATE_KEY = 'fdacc7ba02bcba2f2f69bf81c841ad203ecf2f1b'; // Replace with your Marvel API private key
+const BASE_URL = 'https://gateway.marvel.com/v1/public/characters';
+
+function CharacterList() {
+  const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState({
-    cuisine: '',
-    diet: '',
-  });
+  const [minComics, setMinComics] = useState(0); // State for minimum comics filter
+  const [maxComicsFilter, setMaxComicsFilter] = useState(Infinity); // Initialize max as Infinity
+
+
+  const getMarvelHash = (ts) => {
+    return MD5(ts + PRIVATE_KEY + PUBLIC_KEY).toString(); // Generate MD5 hash
+  };
+
+  const fetchCharacters = async (query = '') => {
+    setLoading(true);
+    try {
+      const timestamp = new Date().getTime();
+      const hash = getMarvelHash(timestamp);
+      const response = await axios.get(BASE_URL, {
+        params: {
+          apikey: PUBLIC_KEY,
+          hash: hash,
+          ts: timestamp,
+          nameStartsWith: query || undefined, // Search characters by name
+          limit: 50,
+        }
+      });
+      setCharacters(response.data.data.results);
+    } catch (error) {
+      console.error('Error fetching characters:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchRecipes = async () => {
-      setLoading(true);
-      try {
-        const response = await axios.get(
-          `https://api.spoonacular.com/recipes/complexSearch`, {
-            params: {
-              apiKey: '9ae4e0a2c72f4ef585b8ff9fa9bfc107',
-              number: 50,
-            }
-          }
-        );
-        setRecipes(response.data.results);
-      } catch (error) {
-        console.error('Error fetching recipes:', error);
-        // Log more details about the error
-        if (error.response) {
-          // The request was made, and the server responded with a status code outside the 2xx range
-          console.error('Response data:', error.response.data);
-          console.error('Response status:', error.response.status);
-          console.error('Response headers:', error.response.headers);
-        } else if (error.request) {
-          // The request was made, but no response was received
-          console.error('Request made but no response received:', error.request);
-        } else {
-          // Something else happened
-          console.error('Error message:', error.message);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-  
-    fetchRecipes();
+    // Initial fetch when component mounts
+    fetchCharacters();
   }, []);
-  
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters(prevFilters => ({
-      ...prevFilters,
-      [name]: value
-    }));
-  };
-  const filteredRecipes = recipes
-  .filter(recipe => (recipe.cuisine || '').includes(filters.cuisine))
-  .filter(recipe => (recipe.diet || '').includes(filters.diet))
-  .filter(recipe => recipe.title.toLowerCase().includes(searchTerm.toLowerCase()));
+  useEffect(() => {
+    // Fetch characters whenever the search term changes
+    fetchCharacters(searchTerm);
+  }, [searchTerm]);
 
+  // Filter characters based on comic appearance and search term
+  const filteredCharacters = characters.filter(character => {
+    const matchesSearch = character.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesComicCount = character.comics.available >= minComics && character.comics.available <= maxComicsFilter;
+    return matchesComicCount && matchesSearch;
+  });
 
-  const totalRecipes = recipes.length;
-  const averagePrepTime = recipes.reduce((sum, recipe) => sum + (recipe.readyInMinutes || 0), 0) / totalRecipes || 0;
-  const uniqueCuisines = [...new Set(recipes.map(recipe => recipe.cuisine))].length;
-    
-  
+  const uniqueComics = new Set(characters.flatMap(character => character.comics.items.map(comic => comic.name))).size; // Unique comics count
+
+  // Calculate comics appearances
+  const totalCharacters = characters.length; // Total number of characters
+  const comicCounts = characters.map(character => character.comics.available);
+  const totalComics = comicCounts.length;
+
+  const averageComics = totalCharacters ? (comicCounts.reduce((sum, count) => sum + count, 0) / totalCharacters).toFixed(2) : 0;
+  const minComicsCount = totalCharacters ? Math.min(...comicCounts) : 0; // Renamed to avoid conflict
+  const maxComics = totalCharacters ? Math.max(...comicCounts) : 0;
+
   return (
     <div>
-      <select name="cuisine" onChange={handleFilterChange}>
-        <option value="">All Cuisines</option>
-        <option value="Italian">Italian</option>
-        <option value="Mexican">Mexican</option>
-        <option value="American">American</option>
-        <option value="Chinese">Chinese</option>
-        <option value="Japanese">Japanese</option>
-        {/* Add more cuisines */}
-      </select>
-      <select name="diet" onChange={handleFilterChange}>
-        <option value="">All Diets</option>
-        <option value="Vegetarian">Vegetarian</option>
-        <option value="Vegan">Vegan</option>
-        <option value="Gluten Free">Gluten Free</option>
-        <option value="Pescaterian">Pe</option>
-        {/* Add more diets */}
-      </select>
       <input
         type="text"
-        placeholder="Search Recipes..."
+        placeholder="Search Characters..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
       />
       <div>
-    </div>
+        <label>
+          Minimum Comics Appearance:
+          <input
+            type="number"
+            value={minComics}
+            onChange={(e) => setMinComics(Number(e.target.value))} // Update state correctly
+            min="0" // Optional: Set minimum to 0
+          />
+        </label>
+        <label>
+        Maximum Comics Appearance:
+        <input
+          type="number"
+          value={maxComicsFilter === Infinity ? '' : maxComicsFilter} // Show empty string for Infinity
+          onChange={(e) => setMaxComicsFilter(Number(e.target.value) || Infinity)} // Allow for Infinity
+          min="0"
+        />
+      </label>
+      </div>
+
       <div>
-        {loading ? <p>Loading...</p> : <p>{filteredRecipes.length} recipes found</p>}
+        {loading ? <p>Loading...</p> : <p>Showing {filteredCharacters.length} characters</p>}
       </div>
       <div>
-        <p>Average Preparation Time: {averagePrepTime.toFixed(2)} minutes</p>
-        <p>Number of Unique Cuisines: {uniqueCuisines}</p>
+        <h2>Fun Facts</h2>
+        <p>Unique Comics: {uniqueComics}</p>
+        <p>Average times a character appears in a comic: {averageComics}</p>
+        <p>Min times: {minComicsCount}</p>
+        <p>Max times: {maxComics}</p>
       </div>
-      <ul>
-        {filteredRecipes.map(recipe => (
-          <li key={recipe.id}>{recipe.title}</li>
-        ))}
-      </ul>
+      <div>
+        <h2>Characters:</h2>
+        <ul>
+          {filteredCharacters.map(character => (
+            <li key={character.id}>
+              {character.name} - Appears in {character.comics.available} comics
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
-  
-};
+}
 
-export default RecipeList;
+export default CharacterList;

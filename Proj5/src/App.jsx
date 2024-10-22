@@ -4,7 +4,7 @@ import RecipeList from './RecipeList.jsx';
 function App() {
   return (
     <div className="App">
-      <h1>Spoonacular Recipe Finder</h1>
+      <h1>Marvel</h1>
       <RecipeList />
     </div>
   );
